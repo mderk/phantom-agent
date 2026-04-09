@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "annotated-types>=0.7.0",
-    "bitgn-local-sdk",
+    "bitgn-api-connectrpc-python",
+    "claude-agent-sdk>=0.1.0",
     "connectrpc==0.9.0",
     "openai>=2.26.0",
     "openai-agents>=0.0.7",
@@ -16,11 +17,9 @@ dependencies = [
     "uvicorn>=0.30.0",
 ]
 
-[tool.uv.sources]
-bitgn-local-sdk = { path = "../bitgn-local-sdk" }
+[[tool.uv.index]]
+name = "buf"
+url = "https://buf.build/gen/python"
 
 [tool.uv]
-# AICODE-NOTE: Keep this project flat so the sample stays runnable without
-# packaging ceremony. The BitGN SDK modules come from the local path dependency
-# `../bitgn-local-sdk`, which is generated from the repository `proto/` files.
 package = false
