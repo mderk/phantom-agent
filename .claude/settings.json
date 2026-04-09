@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(find *)",
+      "Bash(tree *)",
+      "Bash(file *)",
+      "Bash(stat *)",
+      "Bash(du *)",
+      "Bash(df *)",
+      "Bash(which *)",
+      "Bash(pwd)",
+      "Bash(env)",
+      "Bash(echo *)",
+      "Bash(uv *)"
+    ]
+  }
+}
