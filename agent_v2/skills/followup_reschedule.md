@@ -14,7 +14,7 @@ WORKFLOW:
 8. List /reminders/ and find the reminder matching the account_id
 9. Update the reminder JSON with the same new date
 10. Verify BOTH files by reading them back
-11. report_completion with grounding_refs including BOTH file paths
+11. submit_answer with grounding_refs including BOTH file paths
 
 CRITICAL: You must update BOTH the account AND the reminder. Missing one = fail.
 

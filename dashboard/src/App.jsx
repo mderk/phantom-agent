@@ -68,7 +68,11 @@ function TaskPanel({ task, events, runId }) {
         </div>
         <CopyButton runId={runId} taskId={task.task_id}/>
       </div>
-      {task.score_detail?.length>0&&<div className="px-5 py-2 border-b border-slate-800/50"><div className="text-[10px] uppercase tracking-wider text-slate-600 mb-1">Score detail</div>{task.score_detail.map((d,i)=><div key={i} className="text-xs text-red-400/80">{d}</div>)}</div>}
+      {task.score===0&&<div className="px-5 py-3 border-b border-slate-800/50 bg-red-950/20">
+        <div className="text-[10px] uppercase tracking-wider text-red-400/60 mb-2">Failed — Expected vs Actual</div>
+        {task.score_detail?.map((d,i)=><div key={i} className="text-xs text-red-400 mb-1">{d}</div>)}
+        {(()=>{const out=taskEvents.find(e=>e.type==='agent_output');return out?<div className="mt-2"><div className="text-[10px] text-slate-600 mb-1">Agent answer:</div><pre className="text-xs text-slate-400 whitespace-pre-wrap max-h-24 overflow-y-auto bg-slate-950/50 rounded p-2 border border-slate-800/50">{out.output||'(empty)'}</pre></div>:null})()}
+      </div>}
       <div ref={scrollRef} className="px-5 py-3 space-y-0.5 text-xs font-mono max-h-[600px] overflow-y-auto">
         {taskEvents.length===0&&<div className="text-slate-700 py-4 text-center">Waiting for events...</div>}
         {taskEvents.map((ev,i)=><EventLine key={i} ev={ev}/>)}
@@ -306,6 +310,121 @@ function SkillsView() {
   )
 }
 
+// ── Settings View ────────────────────────────────────────
+
+const LLM_PRESETS = [
+  { name: 'gpt-oss-120b', model: 'gpt-oss-120b', baseUrl: 'http://109.230.162.92:44334/v1', apiKey: '', inputPrice: 0, outputPrice: 0 },
+  { name: 'qwen3.5-35b-a3b (self-hosted)', model: 'qwen3.5-35b-a3b', baseUrl: 'https://4090-2-48.neuraldeep.tech/v1', apiKey: '', inputPrice: 0, outputPrice: 0 },
+]
+
+function SettingsView({ appConfig, onConfigUpdate }) {
+  const [model, setModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [bitgnKey, setBitgnKey] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/config/llm').then(r => r.json()).then(d => {
+      setModel(d.model || '')
+      setBaseUrl(d.openai_base_url || '')
+      setApiKey(d.openai_api_key || '')
+      setBitgnKey(d.bitgn_api_key || '')
+      setLoaded(true)
+    }).catch(() => setLoaded(true))
+  }, [])
+
+  const applyPreset = (preset) => {
+    setModel(preset.model)
+    setBaseUrl(preset.baseUrl)
+    setApiKey(preset.apiKey)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      const r = await fetch('/api/config/llm', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, openai_base_url: baseUrl, openai_api_key: apiKey, bitgn_api_key: bitgnKey })
+      })
+      const d = await r.json()
+      if (d.error) { alert(d.error); return }
+      setSaved(true)
+      if (onConfigUpdate) onConfigUpdate(d)
+      setTimeout(() => setSaved(false), 3000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!loaded) return <div className="text-center py-12 text-slate-600">Loading...</div>
+
+  const inputCls = "w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2.5 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 font-mono"
+
+  return (
+    <div className="max-w-xl">
+      <h2 className="text-sm font-semibold text-white mb-4">LLM Configuration</h2>
+
+      <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800/50 mb-4">
+        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Presets</div>
+        <div className="flex gap-2 flex-wrap">
+          {LLM_PRESETS.map(p => (
+            <button key={p.name} onClick={() => applyPreset(p)}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                model === p.model && baseUrl === p.baseUrl
+                  ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-400'
+                  : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+              }`}>
+              {p.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-slate-900/80 rounded-xl p-5 border border-slate-800/50 space-y-4">
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1.5">Model name</label>
+          <input className={inputCls} placeholder="gpt-4.1-2025-04-14" value={model} onChange={e => setModel(e.target.value)} />
+          <p className="text-[10px] text-slate-600 mt-1">Model ID passed to the API (e.g. gpt-4o, gpt-oss-120b, claude-sonnet-4-20250514)</p>
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1.5">API endpoint</label>
+          <input className={inputCls} placeholder="https://api.openai.com/v1" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+          <p className="text-[10px] text-slate-600 mt-1">Base URL for the OpenAI-compatible API (vLLM, LiteLLM, OpenRouter, etc.)</p>
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1.5">API token</label>
+          <input className={inputCls} type="password" placeholder="sk-..." value={apiKey} onChange={e => setApiKey(e.target.value)} />
+          <p className="text-[10px] text-slate-600 mt-1">API key for authentication</p>
+        </div>
+        <div className="border-t border-slate-800/50 pt-4">
+          <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1.5">BitGN API key</label>
+          <input className={inputCls} type="password" placeholder="bgn-..." value={bitgnKey} onChange={e => setBitgnKey(e.target.value)} />
+          <p className="text-[10px] text-slate-600 mt-1">Key for the BitGN leaderboard (required for full runs)</p>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <button onClick={handleSave} disabled={saving} className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 px-5 py-2 rounded-lg text-xs font-semibold text-white transition-all">
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          {saved && <span className="text-xs text-emerald-400">Settings saved. Next run will use the new configuration.</span>}
+        </div>
+      </div>
+      <div className="mt-4 bg-slate-900/50 rounded-xl p-4 border border-slate-800/50">
+        <div className="text-[10px] uppercase tracking-wider text-slate-600 mb-2">Current active config</div>
+        <div className="space-y-1 text-xs font-mono">
+          <div><span className="text-slate-600">model:</span> <span className="text-cyan-400">{appConfig?.model || '—'}</span></div>
+          <div><span className="text-slate-600">endpoint:</span> <span className="text-slate-400">{appConfig?.openai_base_url || '—'}</span></div>
+          <div><span className="text-slate-600">token:</span> <span className="text-slate-400">{appConfig?.openai_api_key ? '••••' + appConfig.openai_api_key.slice(-4) : '—'}</span></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main App ──────────────────────────────────────────────
 
 export default function App() {
@@ -317,7 +436,7 @@ export default function App() {
   const [starting, setStarting] = useState(false)
   const [taskFilter, setTaskFilter] = useState('')
   const [concurrency, setConcurrency] = useState(5)
-  const [tab, setTab] = useState('run') // 'run' | 'compare' | 'skills'
+  const [tab, setTab] = useState('run') // 'run' | 'compare' | 'skills' | 'settings'
   const [compareIds, setCompareIds] = useState([])
   const [appConfig, setAppConfig] = useState(null)
   const esRef = useRef(null)
@@ -346,7 +465,7 @@ export default function App() {
         const d=JSON.parse(e.data);setEvents(p=>[...p,d])
         if(d.task_id){setActiveRun(p=>{if(!p)return p;const ts={...p.tasks};const t=ts[d.task_id]||{task_id:d.task_id,status:'pending',score:-1,tool_calls:0,wall_time_ms:0,instruction:'',skill_id:'',score_detail:[],harness_url:'',trial_id:''}
           if(type==='task_start')t.status='running';if(type==='task_instruction'){t.instruction=d.instruction;t.harness_url=d.harness_url||'';t.trial_id=d.trial_id||''};if(type==='task_classified'){t.skill_id=d.skill_id}
-          if(type==='task_done'){t.status='done';t.score=d.score;t.tool_calls=d.tool_calls;t.wall_time_ms=d.wall_time_ms;t.score_detail=d.score_detail||[];t.skill_id=d.skill_id||t.skill_id;t.total_tokens=d.total_tokens||0}
+          if(type==='task_done'){t.status='done';t.score=d.score;t.tool_calls=d.tool_calls;t.wall_time_ms=d.wall_time_ms;t.score_detail=d.score_detail||[];t.skill_id=d.skill_id||t.skill_id;t.total_tokens=d.total_tokens||0;t.input_tokens=d.input_tokens||0;t.output_tokens=d.output_tokens||0}
           if(type==='task_error'){t.status='error';t.score=0};ts[d.task_id]={...t};const sc=Object.values(ts).filter(x=>x.score>=0);const ps=sc.filter(x=>x.score===1).length
           return{...p,tasks:ts,passed:ps,final_score:sc.length>0?(ps/sc.length)*100:0}})}
         if(type==='run_done')setActiveRun(p=>p?{...p,status:'done',final_score:d.final_score,passed:d.passed,wall_time_ms:d.wall_time_ms}:p)
@@ -375,6 +494,20 @@ export default function App() {
   const sortedTasks=activeRun?Object.values(activeRun.tasks).sort((a,b)=>a.task_id.localeCompare(b.task_id,undefined,{numeric:true})):[]
   const scored=sortedTasks.filter(t=>t.score>=0), passed=scored.filter(t=>t.score===1).length, failed=scored.filter(t=>t.score===0).length, running=sortedTasks.filter(t=>t.status==='running').length
 
+  // Cost calculation
+  const runCost = (() => {
+    if (!activeRun) return null
+    const preset = LLM_PRESETS.find(p => p.model === activeRun.model)
+    if (!preset || (!preset.inputPrice && !preset.outputPrice)) return null
+    let totalIn = 0, totalOut = 0
+    for (const t of Object.values(activeRun.tasks)) {
+      totalIn += t.input_tokens || 0
+      totalOut += t.output_tokens || 0
+    }
+    const cost = (totalIn / 1_000_000) * preset.inputPrice + (totalOut / 1_000_000) * preset.outputPrice
+    return { cost, totalIn, totalOut }
+  })()
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex">
       <RunSidebar runs={runs} activeRunId={activeRunId} onSelect={(id)=>{setActiveRunId(id);setTab('run')}} compareIds={compareIds} onToggleCompare={toggleCompare} onDelete={deleteRun}/>
@@ -393,20 +526,31 @@ export default function App() {
                 <button onClick={()=>setTab('compare')} className={`text-[10px] px-3 py-1 rounded ${tab==='compare'?'bg-purple-900/50 text-purple-400':'text-slate-600 hover:text-slate-400'}`}>Compare {compareIds.length>0&&`(${compareIds.length})`}</button>
                 <button onClick={()=>{setCompareIds(runs.map(r=>r.run_id));setTab('compare')}} className="text-[10px] px-2 py-1 rounded text-slate-600 hover:text-purple-400">All</button>
                 <button onClick={()=>setTab('skills')} className={`text-[10px] px-3 py-1 rounded ${tab==='skills'?'bg-green-900/50 text-green-400':'text-slate-600 hover:text-slate-400'}`}>Skills</button>
+                <button onClick={()=>setTab('settings')} className={`text-[10px] px-3 py-1 rounded ${tab==='settings'?'bg-amber-900/50 text-amber-400':'text-slate-600 hover:text-slate-400'}`}>Settings</button>
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <select value={appConfig?.model||''} onChange={e=>{
+                const name=e.target.value
+                const preset=LLM_PRESETS.find(p=>p.model===name)
+                if(preset){
+                  fetch('/api/config/llm',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:preset.model,openai_base_url:preset.baseUrl,openai_api_key:preset.apiKey})}).then(r=>r.json()).then(d=>setAppConfig(p=>({...p,model:d.model,openai_base_url:d.openai_base_url,openai_api_key:d.openai_api_key})))
+                }
+              }} className="bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-1.5 text-xs text-cyan-400 focus:outline-none focus:border-cyan-500/50 cursor-pointer">
+                {LLM_PRESETS.map(p=><option key={p.model} value={p.model}>{p.name}</option>)}
+              </select>
               <input className="bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-1.5 text-xs text-slate-300 placeholder-slate-600 w-40 focus:outline-none focus:border-cyan-500/50" placeholder="t01 t02... or all" value={taskFilter} onChange={e=>setTaskFilter(e.target.value)}/>
               <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-1.5">
                 <label className="text-[10px] text-slate-500">Temp</label>
-                <input type="range" min="0" max="2" step="0.1" value={appConfig?.temperature??1} onChange={e=>{const t=Number(e.target.value);setAppConfig(p=>({...p,temperature:t}));fetch('/api/config/temperature',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({temperature:t})})}} className="w-12 h-1 accent-amber-500"/>
+                <input type="range" min="0" max="2" step="0.1" value={appConfig?.temperature??1} onChange={e=>{const t=Number(e.target.value);setAppConfig(p=>({...p,temperature:t}));fetch('/api/config/temperature',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({temperature:t})})}} className="w-20 h-1.5 accent-amber-500"/>
                 <input type="number" min="0" max="2" step="0.1" value={appConfig?.temperature??1} onChange={e=>{const t=Math.min(2,Math.max(0,Number(e.target.value)));setAppConfig(p=>({...p,temperature:t}));fetch('/api/config/temperature',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({temperature:t})})}} className="w-12 bg-transparent text-xs font-mono text-amber-400 text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"/>
               </div>
               <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-1.5">
                 <label className="text-[10px] text-slate-500">Agents</label>
-                <input type="range" min="1" max="30" value={concurrency} onChange={e=>setConcurrency(Number(e.target.value))} className="w-12 h-1 accent-cyan-500"/>
+                <input type="range" min="1" max="30" value={concurrency} onChange={e=>setConcurrency(Number(e.target.value))} className="w-20 h-1.5 accent-cyan-500"/>
                 <input type="number" min="1" max="30" value={concurrency} onChange={e=>setConcurrency(Math.min(30,Math.max(1,Number(e.target.value))))} className="w-10 bg-transparent text-xs font-mono text-cyan-400 text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"/>
               </div>
+              {(activeRun?.status==='running'||runs.some(r=>r.run_id===activeRunId&&r.status==='running'))&&<button onClick={()=>fetch(`/api/runs/${activeRunId}/stop`,{method:'POST'}).then(()=>setActiveRun(p=>p?{...p,status:'error'}:p))} className="bg-red-600 hover:bg-red-500 px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition-all">Stop</button>}
               <button onClick={startRun} disabled={starting} className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition-all">{starting?'Starting...':'Run'}</button>
             </div>
           </div>
@@ -418,6 +562,9 @@ export default function App() {
 
           {/* Skills tab */}
           {tab === 'skills' && <SkillsView/>}
+
+          {/* Settings tab */}
+          {tab === 'settings' && <SettingsView appConfig={appConfig} onConfigUpdate={(d) => setAppConfig(p => ({ ...p, model: d.model, openai_base_url: d.openai_base_url, openai_api_key: d.openai_api_key }))} />}
 
           {/* Run tab */}
           {tab === 'run' && activeRun && (
@@ -432,8 +579,9 @@ export default function App() {
                 {activeRun.wall_time_ms > 0 && <span className="text-[10px] text-slate-500 ml-auto">Total time: {(activeRun.wall_time_ms/1000).toFixed(1)}s</span>}
                 {activeRun.status === 'running' && activeRun.started_at && <span className="text-[10px] text-amber-400 ml-auto animate-pulse">Running...</span>}
               </div>
-              <div className="grid grid-cols-6 gap-3 mb-4">
+              <div className={`grid gap-3 mb-4 ${runCost ? 'grid-cols-7' : 'grid-cols-6'}`}>
                 <StatCard value={`${(activeRun.final_score||0).toFixed(1)}%`} label="Score"/><StatCard value={passed} label="Passed" color="text-emerald-400"/><StatCard value={failed} label="Failed" color="text-red-400"/><StatCard value={running} label="Running" color="text-amber-400"/><StatCard value={sortedTasks.length} label="Total" color="text-slate-300"/><StatCard value={activeRun.wall_time_ms>0?`${(activeRun.wall_time_ms/1000).toFixed(0)}s`:activeRun.status==='running'?'...':'--'} label="Wall Time" color="text-slate-300"/>
+                {runCost && <StatCard value={`$${runCost.cost < 0.01 ? runCost.cost.toFixed(4) : runCost.cost.toFixed(2)}`} label="Cost" color="text-green-400"/>}
               </div>
               <div className="mb-5"><ProgressBar passed={passed} failed={failed} total={sortedTasks.length}/></div>
               <div className="bg-slate-900/50 rounded-xl border border-slate-800/50 overflow-hidden">

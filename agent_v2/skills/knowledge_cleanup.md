@@ -19,5 +19,5 @@ WORKFLOW:
 CRITICAL: List ALL files first. Then delete EACH ONE. Then verify.
 Do NOT skip any file. Templates (underscore-prefixed) and AGENTS.md are kept.
 
-report_completion with grounding_refs listing all deleted paths.
+submit_answer with grounding_refs listing all deleted paths.
 </SKILL_KNOWLEDGE_CLEANUP>

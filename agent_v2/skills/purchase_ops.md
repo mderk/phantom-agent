@@ -7,7 +7,7 @@ WORKFLOW:
 3. Check a few historical purchase records to determine the correct established prefix
 4. Apply ONLY the changes the workspace docs authorize — let the docs define the scope, not the task description's wording
 5. Verify by reading the file back
-6. report_completion with grounding_refs including docs, processing, and purchase paths
+6. submit_answer with grounding_refs including docs, processing, and purchase paths
 
 Key concept: purchases flow through processing lanes. Each lane has an ID prefix
 format. A "regression" means the prefix was changed incorrectly and needs to be reverted

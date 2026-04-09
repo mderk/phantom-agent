@@ -22,18 +22,22 @@ WORKFLOW:
      "body": "<from task>"
    }
 
-5. Update /outbox/seq.json with incremented next value
+5. Update /outbox/seq.json to {"id": next_seq + 1}
 
-6. Verify by reading the created file back
+6. Verify by reading the created file back — must be valid JSON
 
-7. report_completion with:
+CRITICAL: Read /outbox/README.MD first for exact format. Write EXACTLY ONCE. Filename = seq.json id value.
+Email format: {"subject": "...", "to": "email", "body": "...", "sent": false}
+Add "attachments": ["path"] if needed.
+
+7. submit_answer with:
    - grounding_refs: ["/outbox/{id}.json", "/outbox/seq.json", contact_or_account_path]
 
-CRITICAL — Contact resolution limits:
-- Search /contacts/ by name. If NOT found after one search, try /accounts/ too.
-- If STILL not found after checking both → IMMEDIATELY report_completion with OUTCOME_NONE_CLARIFICATION
-- Do NOT retry, do NOT loop, do NOT guess alternative spellings.
-- Maximum 6 tool calls for contact resolution. If unresolved by then → CLARIFICATION.
+CONTACT RESOLUTION STRATEGY:
+- By name → search_text in /contacts/ for full_name match
+- By account name → search_text in /accounts/ for name match, then find primary_contact
+- By description (e.g. "Dutch banking customer", "Austrian energy") → read ALL /accounts/*.json files, match by country, industry, segment, description fields. Do NOT give up after one search — iterate all account files if needed.
+- NEVER clarify if you haven't read all account files yet. Exhaust the search first.
 
-If contact/account cannot be resolved unambiguously → OUTCOME_NONE_CLARIFICATION
+If contact/account truly cannot be resolved after checking ALL files → OUTCOME_NONE_CLARIFICATION
 </SKILL_EMAIL_OUTBOUND>

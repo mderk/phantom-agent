@@ -7,7 +7,7 @@ WORKFLOW:
 3. Compute total from line items
 4. Create JSON file at /my-invoices/{invoice_id}.json following the schema
 5. Verify by reading the file back
-6. report_completion with grounding_refs: ["/my-invoices/README.MD", "/my-invoices/{id}.json"]
+6. submit_answer with grounding_refs: ["/my-invoices/README.MD", "/my-invoices/{id}.json"]
 
 TYPICAL SCHEMA (verify from README.MD):
 {

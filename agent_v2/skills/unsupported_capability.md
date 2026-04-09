@@ -10,7 +10,7 @@ UNSUPPORTED CAPABILITIES:
 WORKFLOW:
 1. Orient yourself — list "/" and identify workspace type
 2. Confirm the capability is indeed missing (no outbox, no calendar, etc.)
-3. report_completion with:
+3. submit_answer with:
    - outcome: OUTCOME_NONE_UNSUPPORTED
    - message: explain which capability is missing and why
    - grounding_refs: ["/AGENTS.md"]

@@ -20,7 +20,7 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         return cls(
-            model=os.getenv("MODEL_ID", "gpt-4.1-2025-04-14"),
+            model=os.getenv("MODEL_ID", "gpt-oss-120b"),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
             openai_base_url=os.getenv("OPENAI_BASE_URL", ""),
             bitgn_api_key=os.getenv("BITGN_API_KEY"),

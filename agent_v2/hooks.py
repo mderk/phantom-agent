@@ -99,7 +99,7 @@ class LiveHooks(RunHooks[TaskContext]):
         name = tool.name if isinstance(tool, FunctionTool) else str(tool)
         result_text = result or ""
         preview = result_text.replace("\n", " ")[:120]
-        if name == "report_completion":
+        if name == "submit_answer":
             print(f" {CLI_GREEN}[DONE]{CLI_CLR} {preview}")
         else:
             print(f" {CLI_DIM}=> {preview}{CLI_CLR}")

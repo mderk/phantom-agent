@@ -13,7 +13,7 @@ WORKFLOW:
 2. Check if the request is truncated: does it end mid-word or mid-sentence?
    → If yes, ALWAYS report OUTCOME_NONE_CLARIFICATION. Do not guess.
 3. If after grounding the request is still ambiguous:
-   - report_completion with OUTCOME_NONE_CLARIFICATION
+   - submit_answer with OUTCOME_NONE_CLARIFICATION
    - message: explain what information is missing
    - grounding_refs: ["/AGENTS.md"]
 4. If the workspace context makes the task clear, execute it normally instead.

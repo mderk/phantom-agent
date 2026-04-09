@@ -27,6 +27,7 @@ class TaskContext:
     completion_submitted: bool = False
     files_read: list[str] = field(default_factory=list)
     files_written: list[str] = field(default_factory=list)
+    file_contents: dict[str, str] = field(default_factory=dict)
     _runtime: object | None = field(default=None, repr=False)
 
     @property
