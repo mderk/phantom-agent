@@ -2,7 +2,7 @@
 This task asks about captured articles or knowledge repo content.
 
 WORKFLOW:
-1. Call get_context to determine current sandbox date
+1. Call get_workspace_context to determine current sandbox date
 2. list_directory /01_capture/ to find capture buckets
 3. list_directory /01_capture/influential/ (or other bucket) to see all files
 4. Files are named with dates: YYYY-MM-DD__slug.md

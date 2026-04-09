@@ -8,7 +8,7 @@ WORKFLOW:
 4. Also check /docs/follow-up-audit.json if it exists
 5. Read the account JSON — find the next_follow_up or follow_up_date field
 6. Compute the new date:
-   - "in two weeks" → get current date from get_context, add 14 days
+   - "in two weeks" → get current date from get_workspace_context, add 14 days
    - "move to 2026-12-15" → use that exact date
 7. Update the account JSON with new follow-up date (keep all other fields!)
 8. List /reminders/ and find the reminder matching the account_id
