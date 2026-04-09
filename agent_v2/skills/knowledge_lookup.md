@@ -9,13 +9,14 @@ WORKFLOW:
 5. Compute the target date from the task:
    - "12 days ago" → current_date - 12 days
    - "the day after tomorrow" → current_date + 2 days
-6. Look for a filename matching the computed date
+6. Look for a filename matching the computed date EXACTLY
 7. If found → report_completion OUTCOME_OK with the filename
    - grounding_refs MUST include the FULL path: /01_capture/influential/YYYY-MM-DD__slug.md
    - message should reference the filename
 8. If NOT found → report_completion OUTCOME_NONE_CLARIFICATION
-   - Explain that no file matches the date
-   - List what dates ARE available
+   - EXACT date match required — do NOT return a "closest" or "nearest" article
+   - Even one day off is still not the requested article
+   - Explain that no file matches the computed date, list what dates ARE available
 
 DATE COMPUTATION:
 - Be precise. 2026-03-29 minus 12 days = 2026-03-17
