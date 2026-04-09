@@ -9,19 +9,19 @@ from .context import TaskContext
 # Tool names exposed via the pac1 MCP server.
 # Full MCP name: mcp__pac1__{name}
 TOOL_NAMES = [
-    "get_context",
-    "tree",
+    "get_workspace_context",
+    "list_directory_tree",
     "list_directory",
     "read_file",
-    "find_files",
-    "search",
+    "find_files_by_name",
+    "search_text",
     "write_file",
     "delete_file",
-    "make_directory",
+    "create_directory",
     "move_file",
     "list_skills",
     "get_skill_instructions",
-    "report_completion",
+    "submit_answer",
 ]
 
 
@@ -35,20 +35,20 @@ def create_tool_server(ctx: TaskContext):
     # ── Sandbox tools ──────────────────────────────────────────
 
     @tool(
-        "get_context",
+        "get_workspace_context",
         "Get current sandbox date/time (JSON with unixTime and ISO). Call this first.",
         {},
     )
-    async def _get_context(args):
+    async def _get_workspace_context(args):
         ctx.telemetry.tool_calls += 1
         return _text(await ctx.runtime.get_context())
 
     @tool(
-        "tree",
-        "Directory tree. root: start dir (default '/'), level: max depth (default 2, 0=unlimited).",
+        "list_directory_tree",
+        "List directory tree structure recursively. root: start dir (default '/'), level: max depth (default 2, 0=unlimited).",
         {"root": str, "level": int},
     )
-    async def _tree(args):
+    async def _list_directory_tree(args):
         ctx.telemetry.tool_calls += 1
         return _text(await ctx.runtime.tree(args["root"], args["level"]))
 
@@ -71,18 +71,21 @@ def create_tool_server(ctx: TaskContext):
         path = args["path"]
         if path not in ctx.files_read:
             ctx.files_read.append(path)
-        return _text(
-            await ctx.runtime.read_file(
-                path, args["start_line"], args["end_line"], args["number"]
-            )
+        content = await ctx.runtime.read_file(
+            path, args["start_line"], args["end_line"], args["number"]
         )
+        # Cache content of security-relevant files
+        lower = path.lower()
+        if "/inbox/" in lower or "agents.md" in lower or "/otp" in lower or "/msg_" in lower:
+            ctx.file_contents[path] = content[:1000]
+        return _text(content)
 
     @tool(
-        "find_files",
-        "Find files by name pattern. kind: 'all'|'files'|'dirs'. limit: 1-100.",
+        "find_files_by_name",
+        "Find files or directories by name pattern. kind: 'all'|'files'|'dirs'. limit: 1-100.",
         {"name": str, "root": str, "kind": str, "limit": int},
     )
-    async def _find_files(args):
+    async def _find_files_by_name(args):
         ctx.telemetry.tool_calls += 1
         return _text(
             await ctx.runtime.find_files(
@@ -91,11 +94,11 @@ def create_tool_server(ctx: TaskContext):
         )
 
     @tool(
-        "search",
+        "search_text",
         "Full-text regex search across files. For counting queries set limit=1000+. Max 2000.",
         {"pattern": str, "root": str, "limit": int},
     )
-    async def _search(args):
+    async def _search_text(args):
         ctx.telemetry.tool_calls += 1
         return _text(
             await ctx.runtime.search(
@@ -124,8 +127,8 @@ def create_tool_server(ctx: TaskContext):
         ctx.telemetry.tool_calls += 1
         return _text(await ctx.runtime.delete(args["path"]))
 
-    @tool("make_directory", "Create a new directory.", {"path": str})
-    async def _make_directory(args):
+    @tool("create_directory", "Create a new directory.", {"path": str})
+    async def _create_directory(args):
         ctx.telemetry.tool_calls += 1
         return _text(await ctx.runtime.mkdir(args["path"]))
 
@@ -147,35 +150,32 @@ def create_tool_server(ctx: TaskContext):
     )
     async def _list_skills(args):
         from .skills.registry import SKILL_REGISTRY
-
         lines = [f"- {sid}: {s.description}" for sid, s in SKILL_REGISTRY.items()]
         return _text("\n".join(lines))
 
     @tool(
         "get_skill_instructions",
-        "Get detailed workflow instructions for a skill id.",
+        "Get detailed workflow instructions for a skill. Call this before acting on any task.",
         {"skill_id": str},
     )
     async def _get_skill_instructions(args):
         from .skills.registry import SKILL_REGISTRY
-
         skill = SKILL_REGISTRY.get(args["skill_id"])
         if not skill:
-            return _text(
-                f"Unknown skill_id '{args['skill_id']}'. Call list_skills."
-            )
+            return _text(f"Unknown skill_id '{args['skill_id']}'. Call list_skills.")
         return _text(skill.prompt or f"No instructions for {args['skill_id']}.")
 
     # ── Completion ─────────────────────────────────────────────
 
     @tool(
-        "report_completion",
-        "Submit the final answer. outcome: OUTCOME_OK | OUTCOME_DENIED_SECURITY | "
-        "OUTCOME_NONE_CLARIFICATION | OUTCOME_NONE_UNSUPPORTED | OUTCOME_ERR_INTERNAL. "
+        "submit_answer",
+        "Submit the final answer. MUST be the last action in every task. "
+        "outcome: OUTCOME_OK | OUTCOME_DENIED_SECURITY | OUTCOME_NONE_CLARIFICATION | "
+        "OUTCOME_NONE_UNSUPPORTED | OUTCOME_ERR_INTERNAL. "
         "grounding_refs: list of exact file paths that support the answer.",
         {"message": str, "outcome": str, "grounding_refs": list},
     )
-    async def _report_completion(args):
+    async def _submit_answer(args):
         ctx.telemetry.tool_calls += 1
         ctx.completion_submitted = True
         refs = args.get("grounding_refs", [])
@@ -200,18 +200,18 @@ def create_tool_server(ctx: TaskContext):
     return create_sdk_mcp_server(
         name="pac1",
         tools=[
-            _get_context,
-            _tree,
+            _get_workspace_context,
+            _list_directory_tree,
             _list_directory,
             _read_file,
-            _find_files,
-            _search,
+            _find_files_by_name,
+            _search_text,
             _write_file,
             _delete_file,
-            _make_directory,
+            _create_directory,
             _move_file,
             _list_skills,
             _get_skill_instructions,
-            _report_completion,
+            _submit_answer,
         ],
     )

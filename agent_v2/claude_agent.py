@@ -18,7 +18,7 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 
 from .claude_tools import TOOL_NAMES, create_tool_server
 from .context import TaskContext, Telemetry
-from .prompts import build_task_prompt, get_system_prompt
+from .prompts import build_task_prompt, get_system_prompt_with_skills
 
 CLI_DIM = "\x1B[2m"
 CLI_CYAN = "\x1B[36m"
@@ -86,7 +86,7 @@ async def run_task_claude(
     )
 
     # ── Classification (LLM first, regex fallback) ─────────────
-    from .skills import classify_task, classify_with_claude, get_skill_prompt
+    from .skills import classify_task, classify_with_claude
 
     # Try Claude LLM classification first
     try:
@@ -106,7 +106,6 @@ async def run_task_claude(
             match = regex_match
             classifier_type = "regex"
 
-    skill_prompt = get_skill_prompt(match.skill_id) if match.skill_id else None
     if match.skill_id:
         print(
             f"  {task_id} skill: {match.skill_id} "
@@ -124,8 +123,8 @@ async def run_task_claude(
         )
 
     # ── Prompts ────────────────────────────────────────────────
-    system_prompt = get_system_prompt()
-    prompt = build_task_prompt(task_text, skill_prompt)
+    system_prompt = get_system_prompt_with_skills()
+    prompt = build_task_prompt(task_text, match.skill_id or None)
 
     # ── MCP tool server bound to this task ─────────────────────
     tool_server = create_tool_server(context)
