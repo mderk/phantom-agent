@@ -4,9 +4,9 @@
 
 ```
 ┌─────────────┐         ┌──────────────────┐         ┌──────────────┐
-│  Developer   │────────▶│  Phantom Agent   │────────▶│  BitGN       │
-│  (Browser)   │◀────────│  System          │◀────────│  Platform    │
-└─────────────┘  HTTP    └──────────────────┘  gRPC   └──────────────┘
+│  Developer  │────────▶│  Phantom Agent   │────────▶│  BitGN       │
+│  (Browser)  │◀────────│  System          │◀────────│  Platform    │
+└─────────────┘  HTTP   └──────────────────┘  gRPC   └──────────────┘
                  SSE      │                            │
                           │  Runs tasks in             │  Provides sandboxed
                           │  isolated VMs              │  file-system VMs
@@ -31,34 +31,34 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  Phantom Agent System                                           │
 │                                                                 │
-│  ┌──────────────┐    SSE     ┌──────────────────────────────┐  │
-│  │  Dashboard    │◀─────────▶│  FastAPI Server               │  │
-│  │  (React/Vite) │           │  server.py                    │  │
-│  │              │    HTTP    │                                │  │
-│  │  - Run tab    │──────────▶│  - /api/runs (CRUD)           │  │
-│  │  - Compare    │           │  - /api/runs/:id/stream (SSE) │  │
-│  │  - Skills     │           │  - /api/config (temperature)  │  │
-│  │  - Heatmap    │           │  - /api/skills, /api/prompt   │  │
-│  └──────────────┘           └──────────┬───────────────────┘  │
+│  ┌──────────────┐    SSE    ┌──────────────────────────────┐    │
+│  │  Dashboard   │◀─────────▶│  FastAPI Server              │    │
+│  │  (React/Vite)│           │  server.py                   │    │
+│  │              │    HTTP   │                              │    │
+│  │  - Run tab   │──────────▶│  - /api/runs (CRUD)          │    │
+│  │  - Compare   │           │  - /api/runs/:id/stream (SSE)│    │
+│  │  - Skills    │           │  - /api/config (temperature) │    │
+│  │  - Heatmap   │           │  - /api/skills, /api/prompt  │    │
+│  └──────────────┘           └──────────┬───────────────────┘    │
 │                                         │                       │
-│                              ┌──────────▼───────────────────┐  │
-│                              │  Agent Runner                 │  │
-│                              │  agent_v2/agent.py            │  │
-│                              │                               │  │
-│                              │  ┌─────────┐  ┌───────────┐  │  │
-│                              │  │Classifier│  │ Skills    │  │  │
-│                              │  │LLM+Regex │  │ 12x .md  │  │  │
-│                              │  └─────────┘  └───────────┘  │  │
-│                              │  ┌─────────┐  ┌───────────┐  │  │
-│                              │  │Tools 13x│  │ Hooks     │  │  │
-│                              │  │file,srch │  │ SSE+logs  │  │  │
-│                              │  └─────────┘  └───────────┘  │  │
-│                              └──────────┬───────────────────┘  │
+│                              ┌──────────▼───────────────────┐   │
+│                              │  Agent Runner                │   │
+│                              │  agent_v2/agent.py           │   │
+│                              │                              │   │
+│                              │  ┌─────────-┐  ┌───────────┐ │   │
+│                              │  │Classifier│  │ Skills    │ │   │
+│                              │  │LLM+Regex │  │ 12x .md   │ │   │
+│                              │  └─────────-┘  └───────────┘ │   │
+│                              │  ┌─────────-┐  ┌───────────┐ │   │
+│                              │  │Tools 13x │  │ Hooks     │ │   │
+│                              │  │file,srch │  │ SSE+logs  │ │   │
+│                              │  └─────────-┘  └───────────┘ │   │
+│                              └──────────┬───────────────────┘   │
 │                                         │                       │
-│                              ┌──────────▼───────────────────┐  │
-│                              │  SQLite (db.py)               │  │
-│                              │  runs, tasks, events          │  │
-│                              └──────────────────────────────┘  │
+│                              ┌──────────▼───────────────────┐   │
+│                              │  SQLite (db.py)              │   │
+│                              │  runs, tasks, events         │   │
+│                              └──────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
          │                              │
          │ gRPC (protobuf)              │ OpenAI Chat Completions
@@ -75,61 +75,61 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Agent Runner (agent_v2/)                                     │
-│                                                               │
+│  Agent Runner (agent_v2/)                                    │
+│                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Task Classification                                    │  │
-│  │                                                         │  │
-│  │  1. LLM Classifier (llm_classifier.py)                  │  │
-│  │     └─ Sends task text to LLM, gets skill_id + conf     │  │
-│  │  2. Regex Classifier (classifier.py)                    │  │
-│  │     └─ Pattern matching fallback, overrides LLM          │  │
-│  │        "clarification" if regex finds a real match       │  │
+│  │  Task Classification                                   │  │
+│  │                                                        │  │
+│  │  1. LLM Classifier (llm_classifier.py)                 │  │
+│  │     └─ Sends task text to LLM, gets skill_id + conf    │  │
+│  │  2. Regex Classifier (classifier.py)                   │  │
+│  │     └─ Pattern matching fallback, overrides LLM        │  │
+│  │        "clarification" if regex finds a real match     │  │
 │  └────────────────────────┬───────────────────────────────┘  │
-│                            │ skill_id                         │
-│                            ▼                                  │
+│                           │ skill_id                         │
+│                           ▼                                  │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Skill Prompt Loader (registry.py)                      │  │
-│  │                                                         │  │
-│  │  Hot-reload: reads .md from disk on every call          │  │
-│  │  12 skills: inbox_processing, email_outbound,           │  │
-│  │  crm_lookup, security_denial, knowledge_capture, ...    │  │
+│  │  Skill Prompt Loader (registry.py)                     │  │
+│  │                                                        │  │
+│  │  Hot-reload: reads .md from disk on every call         │  │
+│  │  12 skills: inbox_processing, email_outbound,          │  │
+│  │  crm_lookup, security_denial, knowledge_capture, ...   │  │
 │  └────────────────────────┬───────────────────────────────┘  │
-│                            │ system_prompt + skill_prompt      │
-│                            ▼                                  │
+│                           │ system_prompt + skill_prompt     │
+│                           ▼                                  │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  OpenAI Agents SDK Runner                               │  │
-│  │                                                         │  │
-│  │  Agent(instructions, model, tools, model_settings)      │  │
-│  │  └─ Runner.run(agent, input, context, hooks, max_turns) │  │
-│  │                                                         │  │
-│  │  ReAct Loop:                                            │  │
+│  │  OpenAI Agents SDK Runner                              │  │
+│  │                                                        │  │
+│  │  Agent(instructions, model, tools, model_settings)     │  │
+│  │  └─ Runner.run(agent, input, context, hooks, max_turns)│  │
+│  │                                                        │  │
+│  │  ReAct Loop:                                           │  │
 │  │    LLM call ──▶ tool call ──▶ result ──▶ LLM call ─▶…  │  │
-│  │                                                         │  │
-│  │  Resilience:                                            │  │
+│  │                                                        │  │
+│  │  Resilience:                                           │  │
 │  │  - Retry up to 3x if 0 tool calls                      │  │
-│  │  - Auto grounding_refs from tracked files               │  │
-│  │  - Fallback text parser if report_completion not called  │  │
+│  │  - Auto grounding_refs from tracked files              │  │
+│  │  - Fallback text parser if report_completion not called│  │
 │  └────────────────────────┬───────────────────────────────┘  │
-│                            │                                  │
-│  ┌─────────────┐ ┌────────▼────────┐ ┌────────────────────┐ │
-│  │ Hooks        │ │ Tools (13)      │ │ Context            │ │
-│  │ hooks.py     │ │ tools.py        │ │ context.py         │ │
-│  │              │ │                 │ │                    │ │
-│  │ - on_llm_*   │ │ - get_context   │ │ - runtime_url     │ │
-│  │ - on_tool_*  │ │ - tree          │ │ - task_text       │ │
-│  │ - SSE emit   │ │ - list_directory│ │ - telemetry       │ │
-│  │ - token track│ │ - read_file     │ │   (tool_calls,    │ │
-│  │              │ │ - find_files    │ │    tokens, time)  │ │
-│  │              │ │ - search        │ │ - files_read[]    │ │
-│  │              │ │ - write_file    │ │ - files_written[] │ │
-│  │              │ │ - delete_file   │ │ - completion_flag │ │
-│  │              │ │ - make_directory│ │                    │ │
-│  │              │ │ - move_file     │ └────────────────────┘ │
-│  │              │ │ - list_skills   │                        │
-│  │              │ │ - get_skill_*   │                        │
-│  │              │ │ - report_compl. │                        │
-│  └─────────────┘ └─────────────────┘                        │
+│                           │                                  │
+│  ┌─────────────┐ ┌────────▼────────┐ ┌────────────────────┐  │
+│  │ Hooks       │ │ Tools (13)      │ │ Context            │  │
+│  │ hooks.py    │ │ tools.py        │ │ context.py         │  │
+│  │             │ │                 │ │                    │  │ 
+│  │ - on_llm_*  │ │ - get_context   │ │ - runtime_url      │  │
+│  │ - on_tool_* │ │ - tree          │ │ - task_text        │  │
+│  │ - SSE emit  │ │ - list_directory│ │ - telemetry        │  │
+│  │ - tokentrack│ │ - read_file     │ │   (tool_calls,     │  │
+│  │             │ │ - find_files    │ │    tokens, time)   │  │
+│  │             │ │ - search        │ │ - files_read[]     │  │
+│  │             │ │ - write_file    │ │ - files_written[]  │  │
+│  │             │ │ - delete_file   │ │ - completion_flag  │  │
+│  │             │ │ - make_directory│ │                    │  │
+│  │             │ │ - move_file     │ └────────────────────┘  │
+│  │             │ │ - list_skills   │                         │
+│  │             │ │ - get_skill_*   │                         │
+│  │             │ │ - report_compl. │                         │
+│  └─────────────┘ └─────────────────┘                         │
 └──────────────────────────────────────────────────────────────┘
 ```
 
