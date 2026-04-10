@@ -194,35 +194,13 @@ async def gather_workspace_instructions(
         if ref_path in ctx.file_contents:
             collected[ref_path] = ctx.file_contents[ref_path]
             return
-        # Try reading as a file first
+        # Read as a file only — skip directory expansion (agent can read those itself)
         try:
             content = await ctx.runtime.read_file(ref_path, 0, 0, False)
             if len(content) > _MAX_FILE_CHARS:
                 content = content[:_MAX_FILE_CHARS] + f"\n\n[TRUNCATED ({len(content)} chars) — read full file at {ref_path} if needed]"
             ctx.file_contents[ref_path] = content
             collected[ref_path] = content
-            return
-        except Exception:
-            pass
-        # If read_file failed, try as a directory — list and read .md files
-        try:
-            dir_listing = await ctx.runtime.list_dir(ref_path)
-            for line in dir_listing.splitlines():
-                fname = line.strip()
-                if not fname or not fname.lower().endswith(".md"):
-                    continue
-                fpath = f"{ref_path}/{fname}".replace("//", "/")
-                if fpath in ctx.file_contents or fpath in collected:
-                    collected[fpath] = ctx.file_contents.get(fpath, collected.get(fpath, ""))
-                    continue
-                try:
-                    content = await ctx.runtime.read_file(fpath, 0, 0, False)
-                    if len(content) > _MAX_FILE_CHARS:
-                        content = content[:_MAX_FILE_CHARS] + f"\n\n[TRUNCATED ({len(content)} chars) — read full file at {fpath} if needed]"
-                    ctx.file_contents[fpath] = content
-                    collected[fpath] = content
-                except Exception:
-                    pass
         except Exception:
             pass
 
