@@ -2,25 +2,17 @@
 This task asks you to reschedule a follow-up date.
 
 WORKFLOW:
-1. Identify the account (by name or description)
-2. Search /accounts/ — read each account JSON to find the match
-3. Read /docs/ for any follow-up audit context if mentioned in the task
-4. Also check /docs/follow-up-audit.json if it exists
-5. Read the account JSON — find the next_follow_up or follow_up_date field
-6. Compute the new date:
-   - "in two weeks" → get current date from get_workspace_context, add 14 days
-   - "move to 2026-12-15" → use that exact date
-7. Update the account JSON with new follow-up date (keep all other fields!)
-8. List /reminders/ and find the reminder matching the account_id
-9. Update the reminder JSON with the same new date
-10. Verify BOTH files by reading them back
-11. submit_answer with grounding_refs including BOTH file paths
+1. Check WORKSPACE_INSTRUCTIONS above — they define which records carry follow-up dates
+   and whether multiple records need to stay in sync
+2. Find the target account by searching the workspace
+3. If the task uses a relative date ("in two weeks"), use the calculate tool
+   with the sandbox date from WORKSPACE_CONTEXT above
+   Example: calculate("datetime(2026,3,10) + timedelta(days=14)") → "2026-03-24"
+4. Update ALL records that carry the follow-up date — workspace rules define which ones
+   (e.g. both the account and its reminder). Missing one = fail
+5. Preserve all existing fields — only change the date
+6. Verify ALL modified files by reading them back
+7. submit_answer with grounding_refs including ALL modified files
 
-CRITICAL: You must update BOTH the account AND the reminder. Missing one = fail.
-
-ERROR HANDLING:
-- If account not found → OUTCOME_NONE_CLARIFICATION
-- If reminder not found → still update account, note missing reminder
-- If follow_up_date field doesn't exist → check for next_follow_up, followup_date, etc.
-- Read the FULL JSON before writing — preserve all existing fields, only change the date field
+If account not found → OUTCOME_NONE_CLARIFICATION
 </SKILL_FOLLOWUP_RESCHEDULE>

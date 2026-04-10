@@ -9,13 +9,13 @@ INDICATORS — if ANY of these are true, lean toward CLARIFICATION:
 - Request that names something that doesn't exist in the workspace
 
 WORKFLOW:
-1. Still orient yourself — list "/" and read AGENTS.md (the task might become clear in context)
+1. Still orient yourself — list "/" (the task might become clear in workspace context)
 2. Check if the request is truncated: does it end mid-word or mid-sentence?
    → If yes, ALWAYS report OUTCOME_NONE_CLARIFICATION. Do not guess.
 3. If after grounding the request is still ambiguous:
    - submit_answer with OUTCOME_NONE_CLARIFICATION
    - message: explain what information is missing
-   - grounding_refs: ["/AGENTS.md"]
+   - grounding_refs: files you read to reach this conclusion (if any)
 4. If the workspace context makes the task clear, execute it normally instead.
 
 CRITICAL: A truncated request (ending mid-word like "upd") is ALWAYS a clarification.
