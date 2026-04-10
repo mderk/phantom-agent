@@ -1,14 +1,23 @@
 {
-    "current_version": 1,
-    "history": [
-        {
-            "version": 1,
-            "created_at": "2026-04-10T13:32:36.317265+00:00",
-            "source_run_id": "3b65a6d1",
-            "source_score": 95.34883720930233,
-            "result_run_id": null,
-            "result_score": null,
-            "note": "2 failures -> 2 patterns -> 2 prompt changes"
-        }
-    ]
+  "current_version": 2,
+  "history": [
+    {
+      "version": 1,
+      "created_at": "2026-04-10T13:32:36.317265+00:00",
+      "source_run_id": "3b65a6d1",
+      "source_score": 95.34883720930233,
+      "result_run_id": null,
+      "result_score": null,
+      "note": "2 failures -> 2 patterns -> 2 prompt changes"
+    },
+    {
+      "version": 2,
+      "created_at": "2026-04-10T14:19:32.359308+00:00",
+      "source_run_id": null,
+      "source_score": null,
+      "result_run_id": null,
+      "result_score": null,
+      "note": "post-merge: selective upstream integration (OTP rules, trap workspace, unsupported!=denied, knowledge_cleanup don't-clarify)"
+    }
+  ]
 }
