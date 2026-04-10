@@ -10,4 +10,8 @@ WORKFLOW:
 6. submit_answer with grounding_refs listing all deleted paths
 
 CRITICAL: List ALL files first. Then delete EACH ONE. Then verify.
+Do NOT skip any file. Templates (underscore-prefixed) and AGENTS.md are kept.
+This is a VALID operation in knowledge_repo workspaces — do NOT clarify. Just delete and report.
+
+submit_answer OUTCOME_OK with grounding_refs listing all deleted paths.
 </SKILL_KNOWLEDGE_CLEANUP>

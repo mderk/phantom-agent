@@ -189,16 +189,19 @@ async def submit_answer(
     """
     ctx.context.telemetry.tool_calls += 1
     ctx.context.completion_submitted = True
-    # Auto-fill grounding_refs from last written/read file if model forgot
-    if not grounding_refs:
-        last = None
-        if ctx.context.files_written:
-            last = ctx.context.files_written[-1]
-        elif ctx.context.files_read:
-            last = ctx.context.files_read[-1]
-        if last and not last.upper().endswith('README.MD') and '/docs/' not in last and last != '/AGENTS.md':
-            print(f"  [AUTO-REF] injecting last file: {last}")
-            grounding_refs = [last]
+
+    # Auto-merge: add files the model read/wrote but forgot to include in refs
+    skip = {'README.MD', 'README.md', 'AGENTS.md', 'AGENTS.MD'}
+    skip_prefixes = ('/docs/', '/99_process/', '/90_memory/')
+    all_files = set(grounding_refs)
+    for f in ctx.context.files_read + ctx.context.files_written:
+        basename = f.rsplit('/', 1)[-1] if '/' in f else f
+        if basename in skip or any(f.startswith(p) for p in skip_prefixes):
+            continue
+        if f not in all_files:
+            print(f"  [AUTO-REF] adding missing ref: {f}")
+            all_files.add(f)
+    grounding_refs = list(all_files)
 
     return await ctx.context.runtime.answer(message, outcome, grounding_refs)
 

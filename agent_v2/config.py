@@ -26,7 +26,7 @@ class Config:
             bitgn_api_key=os.getenv("BITGN_API_KEY"),
             benchmark_host=os.getenv("BENCHMARK_HOST", "https://api.bitgn.com"),
             benchmark_id=os.getenv("BENCHMARK_ID", "bitgn/pac1-dev"),
-            run_name=os.getenv("BITGN_RUN_NAME", "agent-v2-run"),
+            run_name=os.getenv("BITGN_RUN_NAME", "neuraldeep gpt oss120b x2 4090(48gb)"),
             max_turns=int(os.getenv("AGENT_MAX_TURNS", "50")),
             concurrency=int(os.getenv("AGENT_CONCURRENCY", "10")),
             request_timeout=float(os.getenv("AGENT_REQUEST_TIMEOUT", "120")),
