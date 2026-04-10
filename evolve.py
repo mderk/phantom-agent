@@ -964,7 +964,19 @@ async def run_analyze(run_id: str | None) -> None:
     analyses = []
     for f in failures:
         print(f"  Analyzing {f['task_id']}...", end=" ", flush=True)
-        analysis = await analyze_task(f)
+        try:
+            analysis = await analyze_task(f)
+        except Exception as e:
+            print(f"FAILED: {e}")
+            analysis = {
+                "task_id": f["task_id"],
+                "root_cause": f"Analysis failed: {e}",
+                "origin": "unknown",
+                "fix_type": "no_fix",
+                "fix_target": "",
+                "proposed_change": "",
+                "confidence": 0.0,
+            }
         analyses.append(analysis)
         origin = analysis.get("origin", "?")
         fix_type = analysis.get("fix_type", "?")
