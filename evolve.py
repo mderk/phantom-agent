@@ -175,7 +175,7 @@ def collect_failures(run_id: str, include_passed: bool = False) -> list[dict]:
 _MODEL: str | None = "claude-opus-4-6"
 
 
-async def _query_claude(prompt: str, model: str | None = None) -> str:
+async def _query_claude(prompt: str, model: str | None = None, retries: int = 2) -> str:
     """Single-turn Claude query, returns text response."""
     from claude_agent_sdk import query, ClaudeAgentOptions
 
@@ -184,19 +184,26 @@ async def _query_claude(prompt: str, model: str | None = None) -> str:
     if effective_model:
         options_kw["model"] = effective_model
 
-    result = ""
-    async for message in query(prompt=prompt, options=ClaudeAgentOptions(**options_kw)):
-        mt = type(message).__name__
-        if mt == "AssistantMessage":
-            for block in getattr(message, "content", []):
-                if getattr(block, "type", "") == "text":
-                    result += getattr(block, "text", "")
-        elif mt == "ResultMessage":
-            r = getattr(message, "result", "")
-            if r and not result:
-                result = str(r)
-
-    return result
+    for attempt in range(retries + 1):
+        try:
+            result = ""
+            async for message in query(prompt=prompt, options=ClaudeAgentOptions(**options_kw)):
+                mt = type(message).__name__
+                if mt == "AssistantMessage":
+                    for block in getattr(message, "content", []):
+                        if getattr(block, "type", "") == "text":
+                            result += getattr(block, "text", "")
+                elif mt == "ResultMessage":
+                    r = getattr(message, "result", "")
+                    if r and not result:
+                        result = str(r)
+            return result
+        except Exception as e:
+            if attempt < retries:
+                print(f"  [RETRY {attempt+1}/{retries}] {e}")
+                await asyncio.sleep(2)
+            else:
+                raise
 
 
 def _extract_json(text: str) -> dict | list | None:
