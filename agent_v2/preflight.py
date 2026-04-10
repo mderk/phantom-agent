@@ -148,7 +148,7 @@ async def gather_workspace_instructions(
     Reads all files into ctx.file_contents cache.
     Marks `path` in ctx.agents_dirs_read to prevent re-processing.
     """
-    from .claude_tools import find_agents_file
+    from .claude_tools import find_file_in_listing
 
     norm_path = path.rstrip("/") or "/"
 
@@ -163,7 +163,7 @@ async def gather_workspace_instructions(
             return {}
 
     # Step 2: find and read AGENTS.md
-    agents_name = find_agents_file(listing)
+    agents_name = find_file_in_listing(listing, "agents.md")
     if not agents_name:
         return {}
 
@@ -194,7 +194,7 @@ async def gather_workspace_instructions(
         if ref_path in ctx.file_contents:
             collected[ref_path] = ctx.file_contents[ref_path]
             return
-        # Read as a file only — skip directory expansion (agent can read those itself)
+        # Try as file first; if it's a directory, read its README.md
         try:
             content = await ctx.runtime.read_file(ref_path, 0, 0, False)
             if len(content) > _MAX_FILE_CHARS:
@@ -202,7 +202,22 @@ async def gather_workspace_instructions(
             ctx.file_contents[ref_path] = content
             collected[ref_path] = content
         except Exception:
-            pass
+            # Directory — find and read README (AGENTS.md is auto-read on list_directory)
+            try:
+                dir_listing = await ctx.runtime.list_dir(ref_path)
+            except Exception:
+                return
+            readme_name = find_file_in_listing(dir_listing, "readme.md")
+            if readme_name:
+                fpath = f"{ref_path}/{readme_name}".replace("//", "/")
+                try:
+                    content = await ctx.runtime.read_file(fpath, 0, 0, False)
+                    if len(content) > _MAX_FILE_CHARS:
+                        content = content[:_MAX_FILE_CHARS] + f"\n\n[TRUNCATED ({len(content)} chars)]"
+                    ctx.file_contents[fpath] = content
+                    collected[fpath] = content
+                except Exception:
+                    pass
 
     # Read regex-extracted paths immediately
     seen: set[str] = set()

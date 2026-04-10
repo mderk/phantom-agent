@@ -33,11 +33,12 @@ def _text(s: str) -> dict:
     return {"content": [{"type": "text", "text": s}]}
 
 
-def find_agents_file(listing: str) -> str | None:
-    """Find AGENTS.md in a directory listing (case-insensitive). Returns bare filename or None."""
+def find_file_in_listing(listing: str, target: str) -> str | None:
+    """Find a file in a directory listing (case-insensitive). Returns bare filename or None."""
+    target_lower = target.lower()
     for line in listing.splitlines():
         name = line.strip().rstrip("/")
-        if name.lower() == "agents.md":
+        if name.lower() == target_lower:
             return name
     return None
 
