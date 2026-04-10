@@ -99,15 +99,19 @@ async def run_task_claude(
         match = classify_task(task_text)
         classifier_type = "regex"
 
-    # Fallback to regex if LLM returned nothing or low-value "clarification"
+    # Fallback to regex if LLM returned nothing, low-value "clarification",
+    # or regex has higher confidence
+    regex_match = classify_task(task_text)
     if not match.skill_id or match.skill_id == "clarification":
-        regex_match = classify_task(task_text)
         if regex_match.skill_id and regex_match.skill_id != "clarification":
             match = regex_match
             classifier_type = "regex"
         elif not match.skill_id:
             match = regex_match
             classifier_type = "regex"
+    elif regex_match.skill_id and regex_match.confidence > match.confidence:
+        match = regex_match
+        classifier_type = "regex"
 
     context.skill_id = match.skill_id or ""
 
