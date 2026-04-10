@@ -245,20 +245,20 @@ def create_tool_server(ctx: TaskContext):
         ctx.telemetry.tool_calls += 1
         ctx.completion_submitted = True
         refs = args.get("grounding_refs", [])
-        if not refs:
-            last = None
-            if ctx.files_written:
-                last = ctx.files_written[-1]
-            elif ctx.files_read:
-                last = ctx.files_read[-1]
-            if (
-                last
-                and not last.upper().endswith("README.MD")
-                and "/docs/" not in last
-                and last != "/AGENTS.md"
-            ):
-                print(f"  [AUTO-REF] injecting last file: {last}")
-                refs = [last]
+
+        # Auto-merge: add files the model read/wrote but forgot to include
+        skip = {"README.MD", "README.md", "AGENTS.md", "AGENTS.MD"}
+        skip_prefixes = ("/docs/", "/99_process/", "/90_memory/")
+        all_files = set(refs)
+        for f in ctx.files_read + ctx.files_written:
+            basename = f.rsplit("/", 1)[-1] if "/" in f else f
+            if basename in skip or any(f.startswith(p) for p in skip_prefixes):
+                continue
+            if f not in all_files:
+                print(f"  [AUTO-REF] adding missing ref: {f}")
+                all_files.add(f)
+        refs = list(all_files)
+
         return _text(await ctx.runtime.answer(args["message"], args["outcome"], refs))
 
     # ── Server ─────────────────────────────────────────────────

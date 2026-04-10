@@ -217,7 +217,7 @@ async def _run_single(
         emitter("task_error", {"task_id": task_id, "error": str(exc)[:500]})
 
 
-async def _run_benchmark_async(run_id: str, task_filter: list[str] | None = None) -> None:
+async def _run_benchmark_async(run_id: str, task_filter: list[str] | None = None, stop_on_fail: bool = False, auto_submit: bool = True) -> None:
     cfg = _get_cfg()
     harness = HarnessServiceClientSync(cfg.benchmark_host)
     run = _runs[run_id]
@@ -264,13 +264,24 @@ async def _run_benchmark_async(run_id: str, task_filter: list[str] | None = None
         })
 
         semaphore = asyncio.Semaphore(concurrency)
+        failed = False
 
         async def _guarded(tid: str, trid: str | None) -> None:
+            nonlocal failed
+            if failed and stop_on_fail:
+                run.tasks[tid].status = "pending"
+                return
             async with semaphore:
+                if failed and stop_on_fail:
+                    run.tasks[tid].status = "pending"
+                    return
                 await _run_single(
                     cfg, harness, run_id, tid, trid,
                     cfg.benchmark_id, run.tasks[tid],
                 )
+                if stop_on_fail and run.tasks[tid].score == 0.0 and run.tasks[tid].status == "done":
+                    failed = True
+                    emitter("run_early_stop", {"task_id": tid, "reason": "stop_on_fail"})
 
         await asyncio.gather(*[_guarded(tid, trid) for tid, trid in tasks])
 
@@ -279,7 +290,7 @@ async def _run_benchmark_async(run_id: str, task_filter: list[str] | None = None
         run.finished_at = time.time()
         run.status = RunStatus.DONE
 
-        if run.leaderboard_run_id:
+        if run.leaderboard_run_id and not failed and auto_submit:
             await asyncio.to_thread(
                 harness.submit_run, SubmitRunRequest(run_id=run.leaderboard_run_id)
             )
@@ -371,6 +382,8 @@ async def _startup():
 class RunRequest(BaseModel):
     task_filter: list[str] | None = None
     concurrency: int = 5
+    stop_on_fail: bool = False
+    auto_submit: bool = True
 
 
 @app.get("/api/config")
@@ -405,7 +418,7 @@ async def start_run(req: RunRequest):
         model=cfg.model or "claude-sonnet-4-6",
     )
     store.create_run(run_id, req.concurrency, model=cfg.model or "claude-sonnet-4-6")
-    asyncio.create_task(_run_benchmark_async(run_id, req.task_filter))
+    asyncio.create_task(_run_benchmark_async(run_id, req.task_filter, req.stop_on_fail, req.auto_submit))
     return {"run_id": run_id}
 
 
@@ -486,6 +499,27 @@ async def get_task_log(run_id: str, task_id: str):
 
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse("\n".join(lines))
+
+
+@app.post("/api/runs/{run_id}/submit")
+async def submit_run_to_leaderboard(run_id: str):
+    """Manually submit a completed run to the leaderboard."""
+    run = _runs.get(run_id)
+    if not run:
+        return {"error": "not found"}
+    if run.status != RunStatus.DONE:
+        return {"error": f"run is {run.status.value}, not done"}
+    if not run.leaderboard_run_id:
+        return {"error": "no leaderboard_run_id — run was started with task_filter (playground mode)"}
+    cfg = _get_cfg()
+    harness = HarnessServiceClientSync(cfg.benchmark_host)
+    try:
+        await asyncio.to_thread(
+            harness.submit_run, SubmitRunRequest(run_id=run.leaderboard_run_id)
+        )
+        return {"submitted": run_id, "leaderboard_run_id": run.leaderboard_run_id, "score": run.final_score}
+    except Exception as exc:
+        return {"error": str(exc)[:300]}
 
 
 @app.delete("/api/runs/{run_id}")
