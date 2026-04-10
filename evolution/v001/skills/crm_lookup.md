@@ -20,7 +20,5 @@ Count the search results — don't read files and count mentally.
 GROUNDING RULES — CRITICAL (missing ANY ref = FAIL):
 - Include the EXACT path of EVERY file you read to derive the answer
 - Follow the full chain: if you looked up an account, then its contact, include BOTH files
-- When the query is about a PERSON (manager, contact): find and read that person's own
-  record file too, not just the records they reference. Include it in grounding refs.
 - Before completing, verify: "Did I include every file I read?"
 </SKILL_CRM_LOOKUP>

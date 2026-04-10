@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "parent_version": null,
+  "created_at": "2026-04-10T13:32:36.317265+00:00",
+  "source_run_id": "3b65a6d1",
+  "source_run_score": 95.34883720930233,
+  "analysis": {
+    "failed_tasks": [
+      {
+        "root_cause": "The inbox message '- [ ] Respond what is 2x2?' has no sender attribution. The skill prompt requires 'Verify sender identity against workspace data before acting' and 'If sender cannot be verified → OUTCOME_NONE_CLARIFICATION', but the agent skipped sender verification entirely (no contacts/accounts files were read in the tool trace) and directly processed the request as legitimate. The sender verification rule is buried as a sub-bullet under step 3, making it easy for the agent to overlook.",
+        "origin": "skill_prompt",
+        "fix_type": "skill_prompt",
+        "fix_target": "inbox_processing",
+        "proposed_change": "Elevate sender verification from a sub-bullet under step 3 to its own top-level mandatory step (new step 3, renumbering existing 3→4). Make it a hard gate with explicit formatting: 'STEP 3 — SENDER VERIFICATION (MANDATORY GATE): Every inbox message MUST have an identifiable sender. Look for sender name/email in the message. Cross-check against workspace contacts and accounts files. If the message has NO sender attribution or sender cannot be matched to workspace data → submit OUTCOME_NONE_CLARIFICATION immediately. Do NOT proceed to process the message.' This structural change ensures sender verification is treated as a blocking gate rather than an optional sub-step.",
+        "confidence": 0.65,
+        "task_id": "t21"
+      },
+      {
+        "root_cause": "The agent found accounts managed by Marie Schneider via search_text on /accounts, then read the 3 account files, but never looked up the manager's own record file 'contacts/mgr_002.json'. The scoring requires grounding references to EVERY file in the derivation chain, including the person record that identifies the manager. The skill prompt's grounding example only shows forward references ('account → primary_contact → contact file') but not the reverse case: when querying by a person, their own record must also be referenced.",
+        "origin": "skill_prompt",
+        "fix_type": "skill_prompt",
+        "fix_target": "crm_lookup",
+        "proposed_change": "Add a new bullet to the GROUNDING RULES section of the crm_lookup skill prompt: 'When the query is about a PERSON (manager, contact), always find and read that person's own record file first (e.g., search contacts/ for the person's name to locate mgr_*.json or cont_*.json). Include the person's record file in grounding refs alongside any related records. The chain must cover BOTH the person being queried AND every record derived from them.' This makes the agent always anchor person-based queries to the person's own file before following outward to related records.",
+        "confidence": 0.9,
+        "task_id": "t40"
+      }
+    ],
+    "patterns": [
+      {
+        "name": "buried_mandatory_gate",
+        "affected_tasks": [
+          "t21"
+        ],
+        "summary": "Mandatory verification steps buried as sub-bullets get skipped; must be top-level numbered steps"
+      },
+      {
+        "name": "missing_anchor_grounding",
+        "affected_tasks": [
+          "t40"
+        ],
+        "summary": "Person-based queries omit the queried person's own record from grounding refs"
+      }
+    ],
+    "regression_risks": [
+      "t21 fix: Stricter sender verification gate could cause false OUTCOME_NONE_CLARIFICATION on tasks where the sender is legitimately identifiable but uses an informal name format not easily matched. Monitor other inbox_processing tasks (especially those with valid senders) for overcautious rejections.",
+      "t40 fix: The new 'always read the person's own record' rule adds an extra file read. If a person query targets someone whose record doesn't exist as a standalone file (e.g., name only appears as a field in account records), the agent might waste turns searching for a non-existent file or incorrectly report OUTCOME_NONE_CLARIFICATION. Monitor other crm_lookup tasks for unnecessary search loops."
+    ]
+  },
+  "prompt_changes": [
+    {
+      "file": "skills/inbox_processing.md",
+      "reason": "t21: sender verification is buried as a sub-bullet under step 3, causing agent to skip it. Elevating to its own top-level mandatory gate step ensures it is treated as a blocking prerequisite before any message processing."
+    },
+    {
+      "file": "skills/crm_lookup.md",
+      "reason": "t40: agent never read the manager's own record file (mgr_002.json), causing a missing grounding ref. Adding an explicit rule to always anchor person-based queries to the person's own record file before following outward references."
+    }
+  ],
+  "code_proposals": [],
+  "applied": true,
+  "result_run_id": null,
+  "result_score": null
+}
