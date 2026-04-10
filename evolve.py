@@ -397,6 +397,7 @@ Rules:
 - Target STRUCTURAL gaps that prevent a CLASS of errors
 - If a skill prompt is already correct and the failure is agent randomness, skip it
 - Keep changes minimal — don't rewrite entire prompts, only add/modify the relevant section
+- If a fix applies to ALL skills (not just one), put it in system_prompt.md CONSTRAINTS, not in a skill prompt
 - For analyses with fix_type=no_fix, do NOT propose changes"""
 
     raw = await _query_claude(prompt)
