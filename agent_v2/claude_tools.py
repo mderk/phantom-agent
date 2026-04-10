@@ -247,12 +247,12 @@ def create_tool_server(ctx: TaskContext):
         refs = args.get("grounding_refs", [])
 
         # Auto-merge: add files the model read/wrote but forgot to include
-        skip = {"README.MD", "README.md", "AGENTS.md", "AGENTS.MD"}
-        skip_prefixes = ("/docs/", "/99_process/", "/90_memory/")
+        skip_names = {"readme.md", "agents.md"}
+        skip_prefixes = ("/docs/",)
         all_files = set(refs)
         for f in ctx.files_read + ctx.files_written:
-            basename = f.rsplit("/", 1)[-1] if "/" in f else f
-            if basename in skip or any(f.startswith(p) for p in skip_prefixes):
+            basename = (f.rsplit("/", 1)[-1] if "/" in f else f).lower()
+            if basename in skip_names or any(f.lower().startswith(p) for p in skip_prefixes):
                 continue
             if f not in all_files:
                 print(f"  [AUTO-REF] adding missing ref: {f}")
