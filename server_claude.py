@@ -19,7 +19,7 @@ from bitgn.harness_connect import HarnessServiceClientSync
 from bitgn.harness_pb2 import (
     EndTrialRequest,
     GetBenchmarkRequest,
-    GetTrialRequest,
+
     RunState,
     StartPlaygroundRequest,
     StartRunRequest,
@@ -140,7 +140,14 @@ async def _run_single(
     task_result: TaskResult,
 ) -> None:
     task_result.status = "running"
-    emitter = _make_emitter(run_id)
+    base_emitter = _make_emitter(run_id)
+
+    def emitter(event_type: str, data: dict) -> None:
+        base_emitter(event_type, data)
+        if event_type == "task_classified":
+            task_result.skill_id = data.get("skill_id", "")
+            task_result.skill_confidence = data.get("skill_confidence", 0.0)
+
     emitter("task_start", {"task_id": task_id})
 
     try:
@@ -179,30 +186,6 @@ async def _run_single(
         )
         task_result.score = result.score if result.score >= 0 else 0.0
         task_result.score_detail = list(result.score_detail)
-
-        # Capture full trial log while it's still available
-        try:
-            log_lines: list[str] = []
-            cursor = 0
-            while True:
-                tr = await asyncio.to_thread(
-                    harness.get_trial,
-                    GetTrialRequest(trial_id=trial.trial_id, cursor=cursor),
-                )
-                for log in tr.logs:
-                    log_lines.append(log.text or f"[{log.kind}] {log.type}")
-                next_cur = tr.next_cursor
-                if not next_cur or next_cur == cursor:
-                    break
-                cursor = next_cur
-            if log_lines:
-                store.insert_event(run_id, "trial_log", {
-                    "task_id": task_id,
-                    "trial_id": trial.trial_id,
-                    "lines": log_lines,
-                })
-        except Exception:
-            pass  # Log capture is best-effort
         task_result.tool_calls = telemetry.tool_calls
         task_result.wall_time_ms = telemetry.wall_time_ms
         task_result.status = "done"

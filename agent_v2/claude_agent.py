@@ -15,9 +15,11 @@ import re
 from dataclasses import dataclass
 
 from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk.types import TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
 from .claude_tools import TOOL_NAMES, create_tool_server
 from .context import TaskContext, Telemetry
+from .preflight import gather_workspace_instructions, format_instructions
 from .prompts import build_task_prompt, get_system_prompt_with_skills
 
 CLI_DIM = "\x1B[2m"
@@ -82,6 +84,7 @@ async def run_task_claude(
     context = TaskContext(
         runtime_url=runtime_url,
         task_text=task_text,
+        model=cfg.model,
         telemetry=telemetry,
     )
 
@@ -90,7 +93,7 @@ async def run_task_claude(
 
     # Try Claude LLM classification first
     try:
-        match = await classify_with_claude(task_text, model=cfg.model)
+        match = await classify_with_claude(task_text, model="claude-haiku-4-5-20251001")
         classifier_type = "llm"
     except Exception:
         match = classify_task(task_text)
@@ -105,6 +108,8 @@ async def run_task_claude(
         elif not match.skill_id:
             match = regex_match
             classifier_type = "regex"
+
+    context.skill_id = match.skill_id or ""
 
     if match.skill_id:
         print(
@@ -122,9 +127,36 @@ async def run_task_claude(
             },
         )
 
+    # ── Pre-flight: workspace context + instructions ───────────
+    workspace_context = ""
+    try:
+        ctx_json = await context.runtime.get_context()
+        workspace_context = f"<WORKSPACE_CONTEXT>\n{ctx_json}\n</WORKSPACE_CONTEXT>"
+    except Exception as e:
+        print(f"  {task_id} preflight context warning: {e}")
+
+    workspace_instructions = ""
+    try:
+        collected = await gather_workspace_instructions(context, "/")
+        if collected:
+            block = format_instructions(collected)
+            workspace_instructions = (
+                f"<WORKSPACE_INSTRUCTIONS>\n{block}\n</WORKSPACE_INSTRUCTIONS>"
+            )
+            print(f"  {task_id} preflight: {len(collected)} instruction file(s) gathered")
+    except Exception as e:
+        print(f"  {task_id} preflight warning: {e}")
+
     # ── Prompts ────────────────────────────────────────────────
-    system_prompt = get_system_prompt_with_skills()
+    system_prompt = get_system_prompt_with_skills(workspace_instructions, workspace_context)
     prompt = build_task_prompt(task_text, match.skill_id or None)
+
+    if on_event:
+        on_event("prompts", {
+            "task_id": task_id,
+            "system_prompt": system_prompt,
+            "task_prompt": prompt,
+        })
 
     # ── MCP tool server bound to this task ─────────────────────
     tool_server = create_tool_server(context)
@@ -179,10 +211,9 @@ async def run_task_claude(
 
             if mt == "AssistantMessage":
                 for block in getattr(message, "content", []):
-                    bt = getattr(block, "type", "")
-                    if bt == "tool_use":
+                    if isinstance(block, ToolUseBlock):
                         step += 1
-                        name = getattr(block, "name", "")
+                        name = block.name
                         print(
                             f"  {CLI_CYAN}{task_id} -> {name}{CLI_CLR}",
                             flush=True,
@@ -192,11 +223,15 @@ async def run_task_claude(
                                 "tool_start",
                                 {"task_id": task_id, "tool": name, "step": step},
                             )
-                    elif bt == "tool_result":
+                    elif isinstance(block, ToolResultBlock):
                         rtext = ""
-                        for part in getattr(block, "content", []):
-                            if hasattr(part, "text"):
-                                rtext += part.text
+                        content = block.content
+                        if isinstance(content, str):
+                            rtext = content
+                        elif isinstance(content, list):
+                            for part in content:
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    rtext += part.get("text", "")
                         preview = rtext.replace("\n", " ")[:120]
                         print(
                             f"  {CLI_DIM}=> {preview}{CLI_CLR}",
@@ -211,13 +246,39 @@ async def run_task_claude(
                                     "result": rtext[:2000],
                                 },
                             )
-                    elif bt == "text":
-                        t = getattr(block, "text", "")
+                    elif isinstance(block, TextBlock):
+                        t = block.text
                         if t:
                             last_text = t
                             print(
                                 f"  {CLI_DIM}{task_id} text: {t[:200]}{CLI_CLR}",
                                 flush=True,
+                            )
+
+            elif isinstance(message, UserMessage):
+                for block in getattr(message, "content", []):
+                    if isinstance(block, ToolResultBlock):
+                        rtext = ""
+                        content = block.content
+                        if isinstance(content, str):
+                            rtext = content
+                        elif isinstance(content, list):
+                            for part in content:
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    rtext += part.get("text", "")
+                        preview = rtext.replace("\n", " ")[:120]
+                        print(
+                            f"  {CLI_DIM}=> {preview}{CLI_CLR}",
+                            flush=True,
+                        )
+                        if on_event:
+                            on_event(
+                                "tool_end",
+                                {
+                                    "task_id": task_id,
+                                    "step": step,
+                                    "result": rtext[:2000],
+                                },
                             )
 
             elif mt == "ResultMessage":

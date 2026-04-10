@@ -1,6 +1,9 @@
 """MCP tool server for Claude Agent SDK — PAC1 sandbox tools."""
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timedelta
+
 from claude_agent_sdk import tool, create_sdk_mcp_server
 
 from .context import TaskContext
@@ -19,6 +22,7 @@ TOOL_NAMES = [
     "delete_file",
     "create_directory",
     "move_file",
+    "calculate",
     "list_skills",
     "get_skill_instructions",
     "submit_answer",
@@ -27,6 +31,15 @@ TOOL_NAMES = [
 
 def _text(s: str) -> dict:
     return {"content": [{"type": "text", "text": s}]}
+
+
+def find_agents_file(listing: str) -> str | None:
+    """Find AGENTS.md in a directory listing (case-insensitive). Returns bare filename or None."""
+    for line in listing.splitlines():
+        name = line.strip().rstrip("/")
+        if name.lower() == "agents.md":
+            return name
+    return None
 
 
 def create_tool_server(ctx: TaskContext):
@@ -44,6 +57,41 @@ def create_tool_server(ctx: TaskContext):
         return _text(await ctx.runtime.get_context())
 
     @tool(
+        "calculate",
+        "Evaluate a Python expression and return the result. Use for date math, counting, sums, etc. "
+        "Available: datetime, timedelta, math, sum, len, sorted, min, max. "
+        "Examples: 'datetime(2026,3,10) - timedelta(days=45)', '2280 + 285', 'len([x for x in range(10) if x > 5])'",
+        {"expression": str},
+    )
+    async def _calculate(args):
+        import math
+
+        ctx.telemetry.tool_calls += 1
+        allowed = {
+            "datetime": datetime, "timedelta": timedelta,
+            "abs": abs, "round": round, "sum": sum, "len": len,
+            "min": min, "max": max, "sorted": sorted,
+            "int": int, "float": float, "str": str,
+            "range": range, "list": list,
+            "True": True, "False": False, "math": math,
+        }
+        def _eval():
+            return eval(args["expression"], {"__builtins__": {}}, allowed)
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(_eval), timeout=5
+            )
+            if isinstance(result, datetime):
+                return _text(result.strftime("%Y-%m-%d"))
+            if isinstance(result, timedelta):
+                return _text(str(result.days))
+            return _text(str(result))
+        except asyncio.TimeoutError:
+            return _text("Error: expression timed out (5s limit)")
+        except Exception as e:
+            return _text(f"Error: {e}")
+
+    @tool(
         "list_directory_tree",
         "List directory tree structure recursively. root: start dir (default '/'), level: max depth (default 2, 0=unlimited).",
         {"root": str, "level": int},
@@ -59,7 +107,19 @@ def create_tool_server(ctx: TaskContext):
     )
     async def _list_directory(args):
         ctx.telemetry.tool_calls += 1
-        return _text(await ctx.runtime.list_dir(args["path"]))
+        path = args.get("path", "/")
+        result = await ctx.runtime.list_dir(path)
+        norm_path = path.rstrip("/") or "/"
+        if norm_path not in ctx.agents_dirs_read:
+            from .preflight import gather_workspace_instructions, format_instructions
+            collected = await gather_workspace_instructions(ctx, norm_path, listing=result)
+            if collected:
+                block = format_instructions(collected)
+                return _text(
+                    f"[Workspace instructions for {norm_path}]\n{block}"
+                    f"\n\n[Directory listing for {norm_path}]\n{result}"
+                )
+        return _text(result)
 
     @tool(
         "read_file",
@@ -71,13 +131,15 @@ def create_tool_server(ctx: TaskContext):
         path = args["path"]
         if path not in ctx.files_read:
             ctx.files_read.append(path)
+        # Cache only full-file reads without line numbers
+        is_full_read = args["start_line"] == 0 and args["end_line"] == 0 and not args["number"]
+        if is_full_read and path in ctx.file_contents:
+            return _text(ctx.file_contents[path])
         content = await ctx.runtime.read_file(
             path, args["start_line"], args["end_line"], args["number"]
         )
-        # Cache content of security-relevant files
-        lower = path.lower()
-        if "/inbox/" in lower or "agents.md" in lower or "/otp" in lower or "/msg_" in lower:
-            ctx.file_contents[path] = content[:1000]
+        if is_full_read:
+            ctx.file_contents[path] = content
         return _text(content)
 
     @tool(
@@ -116,6 +178,7 @@ def create_tool_server(ctx: TaskContext):
         path = args["path"]
         if path not in ctx.files_written:
             ctx.files_written.append(path)
+        ctx.file_contents.pop(path, None)
         return _text(
             await ctx.runtime.write_file(
                 path, args["content"], args["start_line"], args["end_line"]
@@ -125,6 +188,7 @@ def create_tool_server(ctx: TaskContext):
     @tool("delete_file", "Delete a file or directory.", {"path": str})
     async def _delete_file(args):
         ctx.telemetry.tool_calls += 1
+        ctx.file_contents.pop(args["path"], None)
         return _text(await ctx.runtime.delete(args["path"]))
 
     @tool("create_directory", "Create a new directory.", {"path": str})
@@ -139,6 +203,8 @@ def create_tool_server(ctx: TaskContext):
     )
     async def _move_file(args):
         ctx.telemetry.tool_calls += 1
+        ctx.file_contents.pop(args["from_path"], None)
+        ctx.file_contents.pop(args["to_path"], None)
         return _text(await ctx.runtime.move(args["from_path"], args["to_path"]))
 
     # ── Skill tools ────────────────────────────────────────────

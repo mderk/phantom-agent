@@ -23,11 +23,14 @@ class TaskContext:
 
     runtime_url: str
     task_text: str
+    skill_id: str = ""
+    model: str | None = None
     telemetry: Telemetry = field(default_factory=Telemetry)
     completion_submitted: bool = False
     files_read: list[str] = field(default_factory=list)
     files_written: list[str] = field(default_factory=list)
     file_contents: dict[str, str] = field(default_factory=dict)
+    agents_dirs_read: set[str] = field(default_factory=set)
     _runtime: object | None = field(default=None, repr=False)
 
     @property
