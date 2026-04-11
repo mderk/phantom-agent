@@ -22,16 +22,19 @@ _DATA_DIRS = {"inbox", "accounts", "contacts", "opportunities", "reminders",
               "02_distill", "04_projects", "07_rfcs"}
 
 
-def _regex_extract_refs(agents_content: str) -> list[str]:
+def _regex_extract_refs(agents_content: str, base_dir: str = "/") -> list[str]:
     """Extract explicit file/dir paths from AGENTS.md using regex.
 
     Handles:
     - Markdown links: [text](/docs/file.md), [text](../docs)
     - Backtick paths: `docs/`, `/99_process/document_capture.md`
     - Bare absolute paths: /docs/inbox-task-processing.md
+
+    Relative paths are resolved from base_dir (the directory containing AGENTS.md).
     """
     paths: list[str] = []
     seen: set[str] = set()
+    base = base_dir.rstrip("/") or ""
 
     # Markdown links: [text](path)
     for m in re.finditer(r"\[.*?\]\(([^)]+)\)", agents_content):
@@ -52,7 +55,8 @@ def _regex_extract_refs(agents_content: str) -> list[str]:
         if p.startswith(".."):
             p = "/" + p.lstrip("./")
         if not p.startswith("/"):
-            p = "/" + p
+            # Relative path — resolve from base_dir
+            p = f"{base}/{p}"
 
         # Skip data directories
         top_dir = p.strip("/").split("/")[0]
@@ -78,6 +82,7 @@ async def _llm_extract_refs(
     agents_content: str,
     task_text: str,
     skill_id: str,
+    base_dir: str = "/",
     model: str | None = None,
 ) -> list[str]:
     """LLM call: given AGENTS.md content + task, return list of file paths to read."""
@@ -114,14 +119,85 @@ async def _llm_extract_refs(
         print(f"  [preflight] LLM extract failed: {e}")
         return []
 
+    base = base_dir.rstrip("/") or ""
     for m in re.finditer(r"\[.*?\]", text, re.DOTALL):
         try:
             paths = json.loads(m.group())
             if isinstance(paths, list):
-                return [p for p in paths if isinstance(p, str) and p.startswith("/")]
+                result = []
+                for p in paths:
+                    if not isinstance(p, str):
+                        continue
+                    if not p.startswith("/"):
+                        p = f"{base}/{p}"
+                    result.append(p)
+                return result
         except (json.JSONDecodeError, ValueError):
             continue
     return []
+
+
+async def _llm_pick_dir_files(
+    dir_path: str,
+    files: list[str],
+    task_text: str,
+    skill_id: str,
+    root_agents_content: str = "",
+    dir_agents_content: str = "",
+    model: str | None = None,
+) -> list[str]:
+    """LLM call: given a directory listing + task + agents context, pick which files to read."""
+    from claude_agent_sdk import query, ClaudeAgentOptions
+    from claude_agent_sdk.types import TextBlock
+
+    file_list = "\n".join(f"- {f}" for f in files)
+    context_parts = []
+    if root_agents_content:
+        context_parts.append(f"Root AGENTS.md:\n{root_agents_content[:2000]}")
+    if dir_agents_content:
+        context_parts.append(f"Directory AGENTS.md ({dir_path}):\n{dir_agents_content[:1000]}")
+    context_block = ("\n\n".join(context_parts) + "\n\n") if context_parts else ""
+
+    prompt = (
+        f"{context_block}"
+        f"Directory: {dir_path}\nFiles:\n{file_list}\n\n"
+        f"Task: {task_text}\nSkill: {skill_id or 'unknown'}\n\n"
+        f"Which files are relevant to this task? Return a JSON array of filenames. "
+        f"If unsure, return all files."
+    )
+
+    options = ClaudeAgentOptions(
+        system_prompt="You select relevant files from a directory. Return ONLY a JSON array of filenames.",
+        allowed_tools=[],
+        permission_mode="dontAsk",
+        max_turns=1,
+        model=model or _PREFLIGHT_MODEL,
+    )
+
+    try:
+        text = ""
+
+        async def _run():
+            nonlocal text
+            async for message in query(prompt=prompt, options=options):
+                if type(message).__name__ == "AssistantMessage":
+                    for block in getattr(message, "content", []):
+                        if isinstance(block, TextBlock):
+                            text += block.text
+
+        await asyncio.wait_for(_run(), timeout=15)
+        for m in re.finditer(r"\[.*?\]", text, re.DOTALL):
+            try:
+                picked = json.loads(m.group())
+                if isinstance(picked, list):
+                    return [f for f in picked if isinstance(f, str) and f in files]
+            except (json.JSONDecodeError, ValueError):
+                continue
+    except Exception as e:
+        print(f"  [preflight] LLM dir pick failed: {e}")
+
+    # Fallback: return all
+    return files
 
 
 def format_instructions(collected: dict[str, str]) -> str:
@@ -181,14 +257,63 @@ async def gather_workspace_instructions(
     collected: dict[str, str] = {agents_path: agents_content}
 
     # Step 3: regex extracts explicit links (instant, always works)
-    regex_paths = _regex_extract_refs(agents_content)
+    regex_paths = _regex_extract_refs(agents_content, base_dir=norm_path)
 
     # Step 4: LLM extracts additional refs in parallel with regex file reads
     llm_task = asyncio.create_task(_llm_extract_refs(
-        agents_content, ctx.task_text, ctx.skill_id
+        agents_content, ctx.task_text, ctx.skill_id, base_dir=norm_path
     ))
 
     # Step 5: read files; if path is a directory, list it and read .md files inside
+
+    async def _read_dir_docs(dir_path: str, dir_listing: str) -> None:
+        """Read relevant doc files from a referenced directory."""
+        md_files = [
+            line.strip().rstrip("/")
+            for line in dir_listing.splitlines()
+            if line.strip().rstrip("/").lower().endswith((".md", ".txt"))
+            and line.strip().rstrip("/").lower() not in ("agents.md",)
+        ]
+        if not md_files:
+            return
+
+        # Few files — just read them all
+        if len(md_files) <= 5:
+            files_to_read = md_files
+        else:
+            # Many files — ask Haiku which ones matter
+            # Read directory's own AGENTS.md for extra context if present
+            dir_agents_content = ""
+            dir_agents_name = find_file_in_listing(dir_listing, "agents.md")
+            if dir_agents_name:
+                dir_agents_path = f"{dir_path}/{dir_agents_name}".replace("//", "/")
+                try:
+                    dir_agents_content = await ctx.runtime.read_file(dir_agents_path, 0, 0, False)
+                    ctx.file_contents[dir_agents_path] = dir_agents_content
+                    collected[dir_agents_path] = dir_agents_content
+                except Exception:
+                    pass
+            files_to_read = await _llm_pick_dir_files(
+                dir_path, md_files, ctx.task_text, ctx.skill_id,
+                root_agents_content=agents_content,
+                dir_agents_content=dir_agents_content,
+            )
+
+        for fname in files_to_read:
+            if len(collected) >= 20:
+                break
+            fpath = f"{dir_path}/{fname}".replace("//", "/")
+            if fpath in ctx.file_contents:
+                collected[fpath] = ctx.file_contents[fpath]
+                continue
+            try:
+                content = await ctx.runtime.read_file(fpath, 0, 0, False)
+                if len(content) > _MAX_FILE_CHARS:
+                    content = content[:_MAX_FILE_CHARS] + f"\n\n[TRUNCATED ({len(content)} chars)]"
+                ctx.file_contents[fpath] = content
+                collected[fpath] = content
+            except Exception:
+                pass
 
     async def _read_or_expand(ref_path: str) -> None:
         if ref_path in ctx.file_contents:
@@ -202,22 +327,12 @@ async def gather_workspace_instructions(
             ctx.file_contents[ref_path] = content
             collected[ref_path] = content
         except Exception:
-            # Directory — find and read README (AGENTS.md is auto-read on list_directory)
+            # Directory — read relevant docs inside
             try:
                 dir_listing = await ctx.runtime.list_dir(ref_path)
             except Exception:
                 return
-            readme_name = find_file_in_listing(dir_listing, "readme.md")
-            if readme_name:
-                fpath = f"{ref_path}/{readme_name}".replace("//", "/")
-                try:
-                    content = await ctx.runtime.read_file(fpath, 0, 0, False)
-                    if len(content) > _MAX_FILE_CHARS:
-                        content = content[:_MAX_FILE_CHARS] + f"\n\n[TRUNCATED ({len(content)} chars)]"
-                    ctx.file_contents[fpath] = content
-                    collected[fpath] = content
-                except Exception:
-                    pass
+            await _read_dir_docs(ref_path, dir_listing)
 
     # Read regex-extracted paths immediately
     seen: set[str] = set()

@@ -148,6 +148,12 @@ async def run_task_claude(
                 f"<WORKSPACE_INSTRUCTIONS>\n{block}\n</WORKSPACE_INSTRUCTIONS>"
             )
             print(f"  {task_id} preflight: {len(collected)} instruction file(s) gathered")
+            if on_event:
+                on_event("preflight", {
+                    "task_id": task_id,
+                    "files_read": list(collected.keys()),
+                    "total_chars": sum(len(v) for v in collected.values()),
+                })
     except Exception as e:
         print(f"  {task_id} preflight warning: {e}")
 
@@ -179,6 +185,7 @@ async def run_task_claude(
         "AskUserQuestion",
         "NotebookEdit",
         "TodoWrite",
+        "Skill",
     ]
 
     options_kw: dict = dict(
