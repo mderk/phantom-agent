@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from claude_agent_sdk import query, ClaudeAgentOptions
 from claude_agent_sdk.types import TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
-from .claude_tools import TOOL_NAMES, create_tool_server
+from .claude_tools import TOOL_NAMES, create_tool_server, merge_grounding_refs
 from .context import TaskContext, Telemetry
 from .preflight import gather_workspace_instructions, format_instructions
 from .prompts import build_task_prompt, get_system_prompt_with_skills
@@ -320,6 +320,8 @@ async def run_task_claude(
         if not context.completion_submitted:
             print("  [FALLBACK] report_completion not called, submitting from text")
             msg, outcome, refs = _extract_fallback_answer(last_text)
+            refs = merge_grounding_refs(context, refs)
+            context.completion_submitted = True
             await context.runtime.answer(msg, outcome, refs)
             if on_event:
                 on_event(

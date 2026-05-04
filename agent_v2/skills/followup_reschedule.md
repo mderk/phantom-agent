@@ -5,6 +5,8 @@ WORKFLOW:
 1. Check WORKSPACE_INSTRUCTIONS above — they define which records carry follow-up dates
    and whether multiple records need to stay in sync
 2. Find the target account by searching the workspace
+   - If the request anchors on a person (contact/manager) instead of an account name,
+     resolve that person’s record first and follow references to the correct account (ownership matters)
 3. If the task uses a relative date ("in two weeks"), use the calculate tool
    with the sandbox date from WORKSPACE_CONTEXT above
    Example: calculate("datetime(2026,3,10) + timedelta(days=14)") → "2026-03-24"

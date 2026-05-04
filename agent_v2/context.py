@@ -2,6 +2,39 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import Protocol
+
+
+class RuntimeClient(Protocol):
+    async def get_context(self) -> str: ...
+    async def tree(self, root: str = "/", level: int = 2) -> str: ...
+    async def list_dir(self, path: str = "/") -> str: ...
+    async def read_file(
+        self,
+        path: str,
+        start_line: int = 0,
+        end_line: int = 0,
+        number: bool = False,
+    ) -> str: ...
+    async def find_files(
+        self,
+        name: str,
+        root: str = "/",
+        kind: str = "all",
+        limit: int = 10,
+    ) -> str: ...
+    async def search(self, pattern: str, root: str = "/", limit: int = 10) -> str: ...
+    async def write_file(
+        self,
+        path: str,
+        content: str,
+        start_line: int = 0,
+        end_line: int = 0,
+    ) -> str: ...
+    async def delete(self, path: str) -> str: ...
+    async def mkdir(self, path: str) -> str: ...
+    async def move(self, from_path: str, to_path: str) -> str: ...
+    async def answer(self, message: str, outcome: str, refs: list[str]) -> str: ...
 
 
 @dataclass
@@ -31,10 +64,10 @@ class TaskContext:
     files_written: list[str] = field(default_factory=list)
     file_contents: dict[str, str] = field(default_factory=dict)
     agents_dirs_read: set[str] = field(default_factory=set)
-    _runtime: object | None = field(default=None, repr=False)
+    _runtime: RuntimeClient | None = field(default=None, repr=False)
 
     @property
-    def runtime(self):
+    def runtime(self) -> RuntimeClient:
         if self._runtime is None:
             from .runtime import AsyncPcmRuntime
 

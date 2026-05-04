@@ -8,7 +8,9 @@ WORKFLOW:
 4. If the task uses a relative date ("45 days ago", "last week"), compute the target date
    from the SANDBOX date, not from your own clock
 5. Match the computed date against available files
-6. If found → submit_answer OUTCOME_OK with full file path in grounding_refs
+6. If found → submit_answer OUTCOME_OK with:
+   - message: the exact full file path (no descriptive text)
+   - grounding_refs: include that same full file path
 7. If NOT found → submit_answer OUTCOME_NONE_CLARIFICATION
    - EXACT date match required — do NOT return a "closest" or "nearest" article
    - List what dates ARE available

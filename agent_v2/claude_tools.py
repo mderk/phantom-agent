@@ -33,6 +33,24 @@ def _text(s: str) -> dict:
     return {"content": [{"type": "text", "text": s}]}
 
 
+def merge_grounding_refs(ctx: TaskContext, refs: list[str] | None) -> list[str]:
+    """Auto-merge grounding refs with files read/written during the task."""
+    refs = refs or []
+
+    skip_names = {"readme.md", "agents.md"}
+    skip_prefixes = ("/docs/",)
+
+    all_files = set(refs)
+    for f in ctx.files_read + ctx.files_written:
+        basename = (f.rsplit("/", 1)[-1] if "/" in f else f).lower()
+        if basename in skip_names or any(f.lower().startswith(p) for p in skip_prefixes):
+            continue
+        if f not in all_files:
+            print(f"  [AUTO-REF] adding missing ref: {f}")
+            all_files.add(f)
+    return list(all_files)
+
+
 def find_file_in_listing(listing: str, target: str) -> str | None:
     """Find a file in a directory listing (case-insensitive). Returns bare filename or None."""
     target_lower = target.lower()
@@ -246,21 +264,14 @@ def create_tool_server(ctx: TaskContext):
         ctx.telemetry.tool_calls += 1
         ctx.completion_submitted = True
         refs = args.get("grounding_refs", [])
+        if not isinstance(refs, list):
+            refs = []
+        refs = [r for r in refs if isinstance(r, str)]
+        refs = merge_grounding_refs(ctx, refs)
 
-        # Auto-merge: add files the model read/wrote but forgot to include
-        skip_names = {"readme.md", "agents.md"}
-        skip_prefixes = ("/docs/",)
-        all_files = set(refs)
-        for f in ctx.files_read + ctx.files_written:
-            basename = (f.rsplit("/", 1)[-1] if "/" in f else f).lower()
-            if basename in skip_names or any(f.lower().startswith(p) for p in skip_prefixes):
-                continue
-            if f not in all_files:
-                print(f"  [AUTO-REF] adding missing ref: {f}")
-                all_files.add(f)
-        refs = list(all_files)
-
-        return _text(await ctx.runtime.answer(args["message"], args["outcome"], refs))
+        return _text(
+            await ctx.runtime.answer(args["message"], args["outcome"], refs)
+        )
 
     # ── Server ─────────────────────────────────────────────────
 
@@ -268,6 +279,7 @@ def create_tool_server(ctx: TaskContext):
         name="pac1",
         tools=[
             _get_workspace_context,
+            _calculate,
             _list_directory_tree,
             _list_directory,
             _read_file,
